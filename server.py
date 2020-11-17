@@ -2,12 +2,19 @@ import math
 import json
 import time
 import socket
+import game
 
-
+JSON_FILE_PATH="state.json"
 send_msg_points = {
-    "points": "",
+    "pos": "",
     "move": ""
 }
+
+send_start_msg_points = {
+    "startPos": "",
+    "move": ""
+}
+
  
 class Figure:
     def __init__(self,x,y,coloexr):
@@ -40,30 +47,58 @@ def send_to_all_users(s, clients, message):
 def launch_game(s,clients):
 
     massHorses = []
-    whiteEnter=True
+    move=0
     withHorse=False
     tempHorse=None
+    sizeWhite=0
+    sizeBlack=0
+    gameEnd=False
     
-    sizeWhite=8
-    sizeBlack=8
-    
-    for i in range(8): 
-        for j in range(8):   
-            if (8 - i + 1 + j ) % 2 == 0:
-                if j>=0 and j<2 :
-                    massHorses.append([i*100,j*100,0])  # 0 - это чёрные
-                if j>=6 and j<8 :
-                    massHorses.append([i*100,j*100,1])  # 1 - это белые
-    startPos_msg = made_json_format("startPos", massHorses)
-    send_to_all_users(s,clients, startPos_msg)       
+
+    success, data = game.load_game_state_from_json(JSON_FILE_PATH)
+
+    if success:
+        massHorses,move = game.parse_data(data)
+        for i in massHorses:
+            if(i['color']==0):
+                sizeBlack+=1
+            else:
+                sizeWhite+=1
+    else:
+        move = 1
+        sizeWhite=8
+        sizeBlack=8
+        for i in range(8): 
+            for j in range(8): 
+                horse_state_format = {
+                        "x": "",
+                        "y": "",
+                        "color": ""
+                }
+                if (8 - i + 1 + j ) % 2 == 0:
+                    if j>=0 and j<2 :
+                        horse_state_format['x']=i*100
+                        horse_state_format['y']=j*100
+                        horse_state_format['color']=0
+                        massHorses.append(horse_state_format)  # 0 - это чёрные
+                    if j>=6 and j<8 :
+                        horse_state_format['x']=i*100
+                        horse_state_format['y']=j*100
+                        horse_state_format['color']=1
+                        massHorses.append(horse_state_format)  # 1 - это белые 
+    send_start_msg_points["startPos"] = massHorses               
+    send_start_msg_points["move"]=move
+    s.sendto((json.dumps(send_start_msg_points)).encode("utf-8"), clients[0])
+    s.sendto((json.dumps(send_start_msg_points)).encode("utf-8"), clients[1])
+        
     
     while True:
-       # try:
+       
         data, addr = s.recvfrom(1024)
         if(addr!=clients[0] and addr!=clients[1]):
             s.sendto(("Сервер заполнен").encode("utf-8"), addr)
         
-        #except
+        
         elif(data!=""):
             json_string = data.decode("utf-8")
             
@@ -79,60 +114,63 @@ def launch_game(s,clients):
                 y1 = my_list_pos[3]
            
             
-                if(whiteEnter and addr==clients[0] or not whiteEnter and addr==clients[1]):
+                if(move==1 and addr==clients[0] or move==0 and addr==clients[1]): #Если ваш ход
         
-                    if (math.fabs(x0-x1)==200 and math.fabs(y0-y1)==100) or  (math.fabs(y0-y1)==200 and math.fabs(x0-x1)==100):
+                    if (math.fabs(x0-x1)==200 and math.fabs(y0-y1)==100) or  (math.fabs(y0-y1)==200 and math.fabs(x0-x1)==100): #Если походили правильно
                         for i in massHorses:
-                            if(i[0]==x0 and i[1] == y0):
-                                if(i[2]==1 and  addr==clients[0]) or (i[2]==0 and addr==clients[1]):
+                            if(i['x']==x0 and i['y'] == y0): #если взяли коня
+                                if(i['color']==1 and  addr==clients[0]) or (i['color']==0 and addr==clients[1]): #если конь того цвета
                                     for j in massHorses:
                                         withHorse=False
-                                        if(j[0]==x1 and j[1]==y1):
-                                            if (j[2]==0 and i[2]==1 or j[2]==1 and i[2]==0): #print("съели лошадку")
-                                                i[0]=x1
-                                                i[1]=y1
+                                        if(j['x']==x1 and j['y']==y1):
+                                            if (j['color']==0 and i['color']==1 or j['color']==1 and i['color']==0): #если съели лошадь
+                                                i['x']=x1
+                                                i['y']=y1
+                                                
                                                 pos=[x0,y0,x1,y1]
-                                               # pos_msg = made_json_format("pos", pos)
                                                 send_msg_points['pos'] = pos
                                                 if(addr==clients[1]):
-                                                    send_msg_points['move'] = "(ход белых)"
+                                                    move=1
+                                                    send_msg_points['move'] = move
                                                 if(addr==clients[0]):
-                                                    send_msg_points['move'] = "(ход чёрных)"
+                                                    move=0
+                                                    send_msg_points['move'] = move
                                                 s.sendto((json.dumps(send_msg_points)).encode("utf-8"), clients[0])
                                                 s.sendto((json.dumps(send_msg_points)).encode("utf-8"), clients[1])
                                                 
                                                 tempHorse=j
                                                 
-                                                whiteEnter=not whiteEnter
                                                 withHorse=True
                                                 
-                                                if(j[2]==0):
+                                                if(j['color']==0):
                                                     sizeBlack-=1
-                                                elif(j[2]==1):
+                                                elif(j['color']==1):
                                                     sizeWhite-=1
                                                 break
-                                            elif (j[2]==0 and i[2]==0 or j[2]==1 and i[2]==1):
+                                            elif (j['color']==0 and i['color']==0 or j['color']==1 and i['color']==1): #если хотим съесть свою лошадь
                                              
                                                 msg = made_json_format("message", "не ешь своих лошадок")
                                                 s.sendto(msg.encode("utf-8"), addr)
                                                 withHorse=True
                                                 break
                                         
-                                    if(not withHorse):
-                                        i[0]=x1
-                                        i[1]=y1
+                                    if(not withHorse): #если просто походили 
+                                        i['x']=x1
+                                        i['y']=y1
                                         pos=[x0,y0,x1,y1]
                                      
                                         send_msg_points['pos'] = pos
                                         if(addr==clients[1]):
-                                            send_msg_points['move'] = "(ход белых)"
+                                            move = 1
+                                            send_msg_points['move'] = move
                                         if(addr==clients[0]):
-                                            send_msg_points['move'] = "(ход чёрных)"
+                                            move = 0
+                                            send_msg_points['move'] = move
                                         s.sendto((json.dumps(send_msg_points)).encode("utf-8"), clients[0])
                                         s.sendto((json.dumps(send_msg_points)).encode("utf-8"), clients[1])
                                         
                                         
-                                        whiteEnter=not whiteEnter
+                                        
                                     break
                                     
                                 else:
@@ -156,12 +194,20 @@ def launch_game(s,clients):
                 
             if(sizeWhite<=4):
                 msg = made_json_format("message", "чёрные выиграли")
+                gameEnd=True
                 send_to_all_users(s,clients, msg)
+            
                 break
             if(sizeBlack<=4):
                 msg = made_json_format("message", "белые выиграли")
+                gameEnd=True
                 send_to_all_users(s,clients, msg)
                 break
+    
+    game.save_game_state_to_json(massHorses,move,gameEnd,JSON_FILE_PATH)
+ 
+        
+        
                                
                 
 def main():       
@@ -190,11 +236,7 @@ def main():
                     if json_string['message']=="exit":
                         clients.remove(addr)
                     
-                        
-                        
-    #                    addr.client_socket.close()
-                        
-            
+        
             elif addr not in clients:
                 
                 clients.append(addr)
@@ -209,21 +251,21 @@ def main():
             print("[" + addr[0] + "]=[" + str(addr[1]) + "]=[" + action_time + "]/", end="")
             print(data.decode("utf-8"))
             
-            print(len(clients))
+
             if len(clients) == 2:
                 launch_game(s, clients)
                 s.close
                 return
-                
+            
                
                
         #except Exception:
-         #   print(Exception)
-          #  print("\n[ Server Stopped ]")
-           # return
+            #print(Exception)
+           # print("\n[ Server Stopped ]")
+            #return
     
-    s.close()                    
-                        
+            #s.close()                    
+                            
   
 if __name__ == "__main__":
     main() 

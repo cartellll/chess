@@ -40,6 +40,8 @@ class Figure(QGraphicsPixmapItem):
         
         return 'figure'
     
+        
+    
 class Gui(QMainWindow):
     SignalAdd = pyqtSignal(Figure)
     SignalRemove = pyqtSignal(Figure)
@@ -87,14 +89,7 @@ class Gui(QMainWindow):
             print("неполадки с сервером")
             self.s.close
             return
-        
-        #reply = QMessageBox.question(self, 'Message',
-         #   "Do you want to save?", QMessageBox.Yes, QMessageBox.No)
-
-        #if reply == QMessageBox.Yes:
-         #   event.accept()
-        #else:
-            #event.ignore()
+      
  
     def paintEvent(self, e):                   
         if self.flag: #рисуем прямоугольник выделенную ячейку
@@ -201,7 +196,7 @@ def run(s,gui,color):
                  data, addr = s.recvfrom(1024)
              except (ConnectionAbortedError,
              ConnectionResetError):
-                 gui.SignalSetQbox.emit("неполадки с сервером")
+                # gui.SignalSetQbox.emit("неполадки с сервером")
                  return
                  
              
@@ -209,20 +204,21 @@ def run(s,gui,color):
                  
                  json_string = data.decode("utf-8")
                  json_string = json.loads(json_string)
+                 #print(json_string)
                  mass_dict_key = list(json_string.keys())
                  
                  for dict_key in mass_dict_key:
                      if dict_key == "startPos":
                          
-                    
-                                 
+                
                          mass = list(json_string[dict_key])
-                        
+                
                          for i in mass:
-                             if(i[2]==0):
-                                 pawnW1 = Figure(i[0], i[1], i[2] ,QPixmap('bHorse.png').scaled(99, 99))
-                             if(i[2]==1):
-                                 pawnW1 = Figure(i[0], i[1], i[2], QPixmap('wHorse.png').scaled(99, 99))
+                             
+                             if(i['color']==0):
+                                 pawnW1 = Figure(i['x'], i['y'], i['color'] ,QPixmap('bHorse.png').scaled(99, 99))
+                             if(i['color']==1):
+                                 pawnW1 = Figure(i['x'], i['y'], i['color'], QPixmap('wHorse.png').scaled(99, 99))
                              time.sleep(0.01)
                              gui.SignalAdd.emit(pawnW1)
                          fullDesk=True
@@ -254,8 +250,10 @@ def run(s,gui,color):
                          gui.SignalSetQbox.emit(mess)
                      
                      if dict_key == "move":
-                        
-                         gui.SignalSetTitle.emit(color+json_string['move'])
+                         if(json_string['move']==1):
+                             gui.SignalSetTitle.emit(color+"(ход белых)")
+                         else:
+                             gui.SignalSetTitle.emit(color+"(ход чёрных)")
                      
 def main():               
 
